@@ -1,0 +1,57 @@
+from web3 import Web3
+
+# Connect to a local Ethereum node
+w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
+
+# Compile the contract code
+contract_source_code = '''
+pragma solidity ^0.8.0;
+
+contract SimpleContract {
+    uint public storedData;
+
+    function set(uint x) public {
+        storedData = x;
+    }
+
+    function get() public view returns (uint) {
+        return storedData;
+    }
+}
+'''
+compiled_contract = w3.eth.compile.solidity(contract_source_code)
+
+# Deploy the contract
+contract_interface = compiled_contract['<stdin>:SimpleContract']
+contract = w3.eth.contract(abi=contract_interface['abi'], bytecode=contract_interface['bin'])
+
+# Get the address of an unlocked account
+from_address = w3.eth.accounts[0]
+
+# Estimate the gas required to deploy the contract
+gas_estimate = contract.constructor().estimateGas()
+
+# Send a transaction to deploy the contract
+transaction = contract.constructor().buildTransaction({
+    'from': from_address,
+    'gas': gas_estimate,
+    'gasPrice': w3.eth.gasPrice,
+    'nonce': w3.eth.getTransactionCount(from_address)
+})
+signed_transaction = w3.eth.account.signTransaction(transaction, from_address)
+transaction_hash = w3.eth.sendRawTransaction(signed_transaction.rawTransaction)
+
+# Wait for the transaction to be mined
+transaction_receipt = w3.eth.waitForTransactionReceipt(transaction_hash)
+
+# Get the address of the deployed contract
+contract_address = transaction_receipt['contractAddress']
+
+# Create a contract object
+simple_contract = w3.eth.contract(address=contract_address, abi=contract_interface['abi'])
+
+# Call the set function
+simple_contract.functions.set(5).transact({'from': from_address})
+
+# Call the get function
+print(simple_contract.functions.get().call())
